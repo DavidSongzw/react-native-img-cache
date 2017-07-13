@@ -1,5 +1,5 @@
 import React, {Component} from "react";
-import {Image, ImageProperties, ImageURISource, Platform} from "react-native";
+import {Image, ImageProperties, ImageURISource, Platform, AsyncStorage} from "react-native";
 import RNFetchBlob from "react-native-fetch-blob";
 const SHA1 = require("crypto-js/sha1");
 
@@ -47,8 +47,19 @@ export class ImageCache {
 
     private cache: { [uri: string]: CacheEntry } = {};
 
+    getCacheSize() {
+      const cacheSize = '0';
+      try {
+        cacheSize = await AsyncStorage.getItem('cacheSize');
+      } catch (e) {
+        cacheSize = '0';
+      }
+      return cacheSize;
+    }
+
     clear() {
         this.cache = {};
+        AsyncStorage.setItem('cacheSize', '0');
         return RNFetchBlob.fs.unlink(BASE_DIR);
     }
 
@@ -102,7 +113,16 @@ export class ImageCache {
             cache.downloading = true;
             const method = source.method ? source.method : "GET";
             cache.task = RNFetchBlob.config({ path }).fetch(method, uri, source.headers);
-            cache.task.then(() => {
+            cache.task.then((res) => {
+                if (res.respInfo && res.respInfo.headers && res.respInfo.headers['Content-Length']) {
+                  const size = parseFloat(res.respInfo.headers['Content-Length']) / (1024 * 1024)
+                  // console.log('resdown', res.respInfo.headers['Content-Length'])
+                  AsyncStorage.getItem('cacheSize').then((err, result) => {
+                    let cacheSize = result || 0
+                    cacheSize = parseFloat(parseFloat(cacheSize) + size).toFixed(2)
+                    AsyncStorage.setItem('cacheSize', JSON.stringify(cacheSize))
+                  })
+                }
                 cache.downloading = false;
                 cache.path = path;
                 this.notify(uri);
